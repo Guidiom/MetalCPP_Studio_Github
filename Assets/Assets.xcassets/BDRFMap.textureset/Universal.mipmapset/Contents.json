@@ -1,0 +1,15 @@
+{
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  },
+  "levels" : [
+    {
+      "filename" : "brdfImage.png",
+      "mipmap-level" : "base"
+    }
+  ],
+  "properties" : {
+    "level-mode" : "none"
+  }
+}
