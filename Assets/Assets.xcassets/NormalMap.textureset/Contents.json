@@ -4,8 +4,7 @@
     "version" : 1
   },
   "properties" : {
-    "interpretation" : "data",
-    "origin" : "bottom-left"
+    "interpretation" : "data"
   },
   "textures" : [
     {

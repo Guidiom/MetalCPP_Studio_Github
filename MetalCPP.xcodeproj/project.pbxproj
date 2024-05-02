@@ -60,6 +60,7 @@
 		1794DE872893A6E800CB9804 /* AAPLShaderTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AAPLShaderTypes.h; sourceTree = "<group>"; };
 		1796A1AA2AD3DD71005854C2 /* MetalCPPDebug.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; name = MetalCPPDebug.entitlements; path = Application/macOS/MetalCPPDebug.entitlements; sourceTree = "<group>"; };
 		1796A1AB2AD3DD71005854C2 /* MetalCPPRelease.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; name = MetalCPPRelease.entitlements; path = Application/macOS/MetalCPPRelease.entitlements; sourceTree = "<group>"; };
+		1797BA762BE313F00079F29B /* MetalCPP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MetalCPP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		179F3A3E288BA41E005A4D4A /* SampleCode.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
 		179F3A73288BF3E6005A4D4A /* main.m */ = {isa = PBXFileReference; explicitFileType = sourcecode.c.objc; fileEncoding = 4; name = main.m; path = Application/main.m; sourceTree = SOURCE_ROOT; };
 		17C66E5A2899BC3C0085A454 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -69,7 +70,6 @@
 		17C66E612899C0860085A454 /* AAPLViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AAPLViewController.m; path = Application/AAPLViewController.m; sourceTree = SOURCE_ROOT; };
 		17CBB4B2297FD25100C1F1FB /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		17CDEB5C28BA7ACD00C32D1A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		17CDEB6628BA816E00C32D1A /* MetalCPP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = MetalCPP.app; path = /Users/guidoschneider/Xcode_Projects/MetalCPP_Studio_work/build/Debug/MetalCPP.app; sourceTree = "<absolute>"; };
 		17D9FD3E28B43EB000325652 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		17DB30902AFFAF36002F9042 /* AAPLShaderCommon.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AAPLShaderCommon.h; sourceTree = "<group>"; };
 		17EA8255289783B30050AD42 /* AAPLMathUtilities.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = AAPLMathUtilities.cpp; sourceTree = "<group>"; };
@@ -112,6 +112,7 @@
 				173D027428D1A9FB006FCB08 /* metal-cpp */,
 				173D027628D1AA1C006FCB08 /* metal-cpp-extensions */,
 				179123D4288B8C54007474F9 /* Renderer */,
+				1797BA762BE313F00079F29B /* MetalCPP.app */,
 			);
 			sourceTree = "<group>";
 		};
@@ -212,7 +213,7 @@
 			);
 			name = MetalCPP;
 			productName = MetalCCP;
-			productReference = 17CDEB6628BA816E00C32D1A /* MetalCPP.app */;
+			productReference = 1797BA762BE313F00079F29B /* MetalCPP.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
