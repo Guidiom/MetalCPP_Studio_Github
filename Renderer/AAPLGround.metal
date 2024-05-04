@@ -37,7 +37,7 @@ vertex QuadInOut ground_vertex(constant GroundVertex * vertices  [[ buffer(Buffe
     
     float4 groundPosition = float4(gv.position.x, 0.f, gv.position.y, 1.f) ;
 
-    out.worldPos = groundPosition.xyz;
+    out.worldPos = groundPosition.xyz ;
     
     out.position = frameData.perspectiveTransform * frameData.planeModelViewMatrix *  groundPosition;
     

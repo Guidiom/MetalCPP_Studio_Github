@@ -226,7 +226,7 @@ private:
     uint num_particles;
     int updatePass;
     NS::UInteger _sampleCount;
-    CFAbsoluteTime _previousTime;
+    double gpuRuntimeDuration;
     float _metallTextureValue;
     float _roughnessTextureValue;
     float _baseColorMixValue;

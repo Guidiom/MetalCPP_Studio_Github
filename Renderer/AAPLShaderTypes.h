@@ -20,8 +20,6 @@ typedef struct __attribute__ ((packed)) packed_float3 {
 
 #define PI 3.1415926535897932384626433832795
 
-
-
 ///enums
 enum BufferIndex : int32_t
 {

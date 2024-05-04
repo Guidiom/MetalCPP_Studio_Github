@@ -21,13 +21,16 @@
     quaternion_float               _rotation;
     simd_float3                   _direction;
     simd_float4            _sunLightPosition;
+    simd_float4            _sunWorldPosition;
     simd_float4             _sunEyeDirection;
     simd_float4x4                     _world;
     simd_float4x4                  _skyModel;
     simd_float4x4          _shadowViewMatrix;
-    matrix_float4x4    _shadowProjectionMatrix;
+    matrix_float4x4        _projectionMatrix;
+    matrix_float4x4  _shadowProjectionMatrix;
     struct CameraData            _cameraData;
     struct CameraData      _shadowCameraData;
+    float                       _fovyRadians;
     float                            _aspect;
     float                               _far;
     float                              _near;
@@ -61,6 +64,8 @@
 @property (nonatomic, assign, readwrite) const quaternion_float rotation;
 
 @property (nonatomic, assign, readwrite) const simd_float4x4 world;
+
+@property (nonatomic, assign, readwrite) const matrix_float4x4 projectionMatrix;
 
 @property (nonatomic, assign, readwrite) const simd_float4x4 skyModel;
 
@@ -97,13 +102,14 @@
 -(nonnull instancetype)initWithPosition:(simd_float3) position
                                rotation:(quaternion_float) rotation
                        sunLightPosition:(simd_float4) sunLightPosition
+                              fovDegree:(float) fovDegree
                                  aspect:(float) aspect
                                viewSize:(float) viewSize
                                    near:(float) near
                                     far:(float) far;
 
-- (void) setViewPortSize:(const NSUInteger) width :(const NSUInteger) height 
-                        :(const uint) offsetX :(const uint) offsetY;
+
+- (void) setAspect:(float)new_aspect;
 
 /// Transform By (Add/Scale)
 - (void) translate:(vector_float3) vec_dt;
@@ -140,6 +146,7 @@
 - (const quaternion_float)                 rotation;
 - (const simd_float4)              sunLightPosition;
 - (const simd_float4)               sunEyeDirection;
+- (const float)                         fovyRadians;
 - (const float)                                 far;
 - (const float)                                near;
 - (const float)                            viewSize;
@@ -152,12 +159,20 @@
 - (const simd_float4x4)                     skyModel;
 - (const simd_float4x4)                 toViewMatrix;
 - (const simd_float3)         updateDirection:(vector_float3)translation
-                                             :(matrix_float4x4) rotationMatrix;
-
+                                             :(matrix_float4x4)rotationMatrix;
+- (const matrix_float4x4)         toProjectionMatrix;
 - (const simd_float4x4)           toShadowViewMatrix;
-- (const matrix_float4x4)     toShadowProjectionMatrix;
+- (const matrix_float4x4)   toShadowProjectionMatrix;
 - (const struct CameraData)         updateCameraData;
 - (const struct CameraData)   updateShadowCameraData;
 
+- (const struct FrustumPoints) calculatePlane:(matrix_float4x4)viewMatrix
+                                             :(float)distance;
+
+- (const struct FrustumPoints) calculatePlanePoints :(simd_float4x4)matrix
+                                                    :(float)halfWidth
+                                                    :(float)halfHeight
+                                                    :(float)distance
+                                                    :(vector_float3)position;
 @end
 

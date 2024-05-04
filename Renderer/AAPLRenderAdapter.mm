@@ -32,16 +32,19 @@
         
         _pRenderer = new Renderer(* ((__bridge MTK::View *) pMTKView));
         
-        float _aspect = (float)pMTKView.drawableSize.width /  float(pMTKView.drawableSize.height != 0 ? pMTKView.drawableSize.height : 1);
+        float _aspect = (float)pMTKView.bounds.size.width /  float(pMTKView.bounds.size.height != 0 ? pMTKView.bounds.size.height : 1);
         
         _camera  = [[AAPLCamera3D alloc] initWithPosition: simd_float3 { 0.0f, 4.0f, 3.0f}
                                                  rotation: quaternion_identity()
-                                         sunLightPosition: simd_float4 { -0.25f , -2.5f , -3.0f , 0.f }
-                                                   aspect: _aspect
+                                         sunLightPosition: simd_float4 { -0.25f , -2.0f , -3.0f , 0.f }
+                                                fovDegree: float {45.f}
+                                                   aspect: (float)_aspect
                                                  viewSize: float {10.f}
                                                      near: float {0.1f}
-                                                      far: float {250.f}];
-        [_camera setViewPortSize: NS::UInteger(pMTKView.drawableSize.width) : NS::UInteger(pMTKView.drawableSize.height) :uint(0) :uint(0)];
+                                                      far: float {200.f}];
+        
+        
+        
         self.camera = _camera;
         
     }
@@ -74,8 +77,10 @@
 - (void)drawableSizeWillChange:(CGSize)size {
     
     const MTL::Size nSize = MTL::Size::Make(size.width, size.height, 1);
+    float aspect = (float)nSize.width / float(nSize.height  != 0 ? nSize.height : 1);
     [self.camera setViewWidth: NS::UInteger(nSize.width)];
     [self.camera setViewHeight: NS::UInteger(nSize.height)];
+    [self.camera setAspect : aspect];
     [self updateCameras];
     
     _pRenderer->drawableSizeWillChange(nSize);

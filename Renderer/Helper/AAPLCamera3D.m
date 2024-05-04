@@ -17,6 +17,11 @@
 
 @implementation AAPLCamera3D : NSObject {};
 
+inline double deg2rad(double deg)
+{
+    return deg * M_PI / 180.;
+}
+
 - (const simd_float4x4)sInvMatrixLookat:(simd_float3)inEye :(simd_float3)inTo :(simd_float3)inUp
 {
     simd_float4x4 iVL = makeIdentity();
@@ -37,12 +42,13 @@
 }
 
 - (void) setSkyModel: (simd_float3) scale : (simd_float3) position {
-    _skyModel    = matrix4x4_scale_translation((vector_float3){1,1,1}, (vector_float3){0,0,0});
+    _skyModel    = matrix4x4_scale_translation(scale, position);
 };
 
 - (nonnull instancetype)initWithPosition:(simd_float3)  position
                                 rotation:(quaternion_float) rotation
                         sunLightPosition:(simd_float4) sunLightPosition
+                               fovDegree:(float) fovDegree
                                   aspect:(float) aspect
                                 viewSize:(float) viewSize
                                     near:(float) near
@@ -55,33 +61,25 @@
         _translation             = position;
         _rotation                = rotation;
         _sunLightPosition        = sunLightPosition;
-        _sunEyeDirection         = (simd_float4){0.f};
         _aspect                  = aspect;
         _viewSize                = viewSize;
         _near                    = near;
         _far                     = far;
-        _center                  = (simd_float3){0.f};
+        _fovyRadians             = radians_from_degrees(fovDegree);
+        _sunEyeDirection         = (simd_float4){0.f,0.f,0.f,0.f};
+        _sunWorldPosition        = (simd_float4){0.f,0.f,0.f,0.f};
+        _center                  = (simd_float3){0.f,0.f,0.f};
         _viewOffsetX             = (uint)0;
         _viewOffsetY             = (uint)0;
         _viewWidth               = (NSUInteger)0;
         _viewHeight              = (NSUInteger)0;
         _world                   = matrix_identity_float4x4;
+        _projectionMatrix        = matrix_identity_float4x4;
         _shadowViewMatrix        = matrix_identity_float4x4;
         _shadowProjectionMatrix  = matrix_identity_float4x4;
         _direction               = (vector_float3){0.f};
-        
-        [self setSkyModel:(simd_float3){1.f,1.f,1.f} :(simd_float3){0.f,0.f,0.f}];
-        
-        _cameraData.aspect = _aspect;
-        _cameraData.viewSize = _viewSize;
-        _cameraData.near = _near;
-        _cameraData.far = _far;
-        _cameraData.center = _center;
-        _cameraData.cameraPosition = _translation;
-        _cameraData.cameraDirection = _direction;
-        _cameraData.sunLightPosition = _sunLightPosition;
-        _cameraData.skyModel = _skyModel;
-        _cameraData.viewMatrix = _world;
+        _skyModel                = matrix4x4_scale_translation((simd_float3){1.f,1.f,1.f},
+                                                               (simd_float3){0.f,0.f,0.f});
         _dirty                 = NO;
     }
     return self;
@@ -100,6 +98,8 @@
 
 - (const simd_float3) center { return _center;}
 
+- (const float) fovyRadians { return _fovyRadians;}
+
 - (const float) far {return _far;}
 
 - (const float) near {return _near;}
@@ -110,7 +110,20 @@
 
 - (const simd_float4) sunLightPosition { return _sunLightPosition;}
 
-- (const simd_float4) sunEyeDirection { return _sunEyeDirection;}
+- (const simd_float4) sunWorldPosition {
+    
+    _sunWorldPosition = simd_mul( [self skyModel] , [self sunLightPosition]);
+    
+    return _sunWorldPosition;
+}
+
+- (const simd_float4) sunEyeDirection {
+    
+    simd_float4 sunWorldDirection = - self.sunWorldPosition;
+    _sunEyeDirection = simd_mul( [self world] , sunWorldDirection);
+    
+    return _sunEyeDirection;
+}
 
 - (const simd_float4x4) skyModel { return _skyModel;}
 
@@ -122,18 +135,14 @@
 
 - (const uint) viewOffsetY {return _viewOffsetY;}
 
-- (void) setViewPortSize:(const NSUInteger)width :(const NSUInteger)height
-                        :(const uint) offsetX :(const uint) offsetY {
-    _dirty = YES;
-    if(_viewWidth != width) { _viewWidth = width;}
-    if(_viewHeight != height){ _viewHeight = height;}
-    if(_viewOffsetX != offsetX){_viewOffsetX = offsetX;}
-    if(_viewOffsetY != offsetY){_viewOffsetY = offsetY;}
-}
 
+- (void) setAspect: (float)new_aspect{
+    _dirty = YES;
+    _aspect = new_aspect;
+}
 - (void) translate:(vector_float3)vec_dt {
     _dirty = YES;
-    _translation += vec_dt;;
+    _translation += vec_dt;
 }
 
 - (void) translate:(float)vec_dx :(float)vec_dy :(float)vec_dz {
@@ -206,61 +215,54 @@
         simd_float4x4 scaleMatrix        = matrix4x4_scale(1.f, 1.f, 1.f);
         _world  = matrix_multiply(matrix_multiply( rotationMatrix, translationMatrix), scaleMatrix);
         _direction = [self updateDirection: self.translation : rotationMatrix ];
-        _sunLightPosition = simd_mul( [self skyModel]  , self.sunLightPosition);
     }
     return _world;
 }
 
 - (const simd_float3) updateDirection :(vector_float3) translation :(matrix_float4x4) rotationMatrix
 {
-    return  simd_mul( matrix3x3_upper_left(rotationMatrix), translation);
+    simd_float4 nDirection = simd_mul(rotationMatrix, (simd_float4){translation.x, translation.y, translation.z, 1});
+    return nDirection.xyz;
 }
 
 -(const simd_float4x4) toShadowViewMatrix {
     
-    vector_float4 sunWorldPosition = self.sunLightPosition;
-    sunWorldPosition = simd_mul( [self skyModel]  , sunWorldPosition);
+        simd_float4 directionalLightUpVector ={0.0, 1.0, 0.0 , 1.0};
+        
+        directionalLightUpVector = simd_mul( [self skyModel], directionalLightUpVector );
+        directionalLightUpVector.xyz = simd_normalize(directionalLightUpVector.xyz);
+        
+        _shadowViewMatrix = matrix_look_at_left_hand (-[self sunWorldPosition].xyz,
+                                                      (simd_float3){0,0,0},
+                                                      directionalLightUpVector.xyz);
     
-    vector_float4 sunWorldDirection = -sunWorldPosition;
-    
-    _sunEyeDirection = matrix_multiply( [self world] , sunWorldDirection);
-    
-    simd_float4 directionalLightUpVector ={0.0, 1.0, 0.0, 0.0};
-    
-    directionalLightUpVector = matrix_multiply( [self skyModel], directionalLightUpVector );
-    directionalLightUpVector.xyz = simd_normalize(directionalLightUpVector.xyz);
-    
-    _shadowViewMatrix = matrix_look_at_left_hand (sunWorldDirection.xyz,
-                                                  (simd_float3){0,0,0},
-                                                  directionalLightUpVector.xyz);
     return _shadowViewMatrix;
 }
 
+-(const matrix_float4x4) toProjectionMatrix{
+    return _projectionMatrix;
+}
+
+
+-(const matrix_float4x4) createFrustumMatrix:(float)fov
+                                            :(float)aspect
+                                            :(float)near
+                                            :(float)far
+{
+    float left   = -self.viewSize * aspect * 0.5;
+    float right  =  self.viewSize * 0.5;
+    float bottom = -self.viewSize * aspect;
+    float top    =  self.viewSize;
+    return matrix_ortho_left_hand( left,  right,  bottom,  top, near, far );
+}
 
 -(const matrix_float4x4) toShadowProjectionMatrix {
-   
-    // const float aspect =  self.aspect;
-    float near   =  -1.f;
-    float far    =  150.f;
-    float left   = -self.viewSize;
-    float right  =  self.viewSize;
-    float bottom = -self.viewSize;
-    float top    =  self.viewSize;
-    /*
-    float dx = (float){ right - left };
-    float dy = (float){ top - bottom };
-    float cx = (float){ right + left };
-    float cy = (float){ top + bottom };
     
-    float Left      = (float) {cx - dx};
-    float Right     = (float) {cx + dx};
-    float Bottom    = (float) {cy - dy};
-    float Top       = (float) {cy + dy};
+    const float aspect = 1.f;
+    const float near   =  self.near;
+    const float far    =  self.far ;
     
-    //float scaleW = (float)( Right - Left ) / self.viewWidth;
-    //float scaleH = (float)( Top - Bottom ) / self.viewHeight;
-    */
-    _shadowProjectionMatrix = matrix_ortho_left_hand( left , right , bottom , top , near , far );
+    _shadowProjectionMatrix = [self createFrustumMatrix: 45 : aspect : near :far];
     
     return _shadowProjectionMatrix;
 }
@@ -269,13 +271,16 @@
 {
         _cameraData.viewMatrix = [self toViewMatrix];
         _cameraData.skyModel = self.skyModel;
-        _cameraData.sunLightPosition= self.sunLightPosition;
-        _cameraData.sunEyeDirection = self.sunEyeDirection;
+        _cameraData.projectionMatrix = [self toProjectionMatrix];
+        _cameraData.sunLightPosition= [self sunWorldPosition];
+        _cameraData.sunEyeDirection = [self sunEyeDirection];
         _cameraData.cameraPosition = self.translation;
         _cameraData.cameraDirection = self.direction;
+        _cameraData.fovyRadians = self.fovyRadians;
         _cameraData.aspect = self.aspect;
         _cameraData.far = self.far;
         _cameraData.near = self.near;
+        _cameraData.center = self.center;
         _cameraData.viewSize = self.viewSize;
     return _cameraData;
 }
@@ -287,5 +292,87 @@
     
     return _shadowCameraData;
 }
+
+- (const struct FrustumPoints) calculatePlane:(simd_float4x4)viewMatrix
+                                             :(float)distance {
+    
+    float aspect = self.aspect;
+    float halfHeight = self.viewSize * 0.5;
+    float halfWidth = halfHeight * aspect;
+   
+    return [self calculatePlanePoints :viewMatrix
+                                      :halfWidth
+                                      :halfHeight
+                                      :distance
+                                      :self.sunWorldPosition.xyz];
+    
+}
+
+- (const struct FrustumPoints) calculatePlanePoints :(simd_float4x4) matrix
+                                                    :(float)halfWidth
+                                                    :(float)halfHeight
+                                                    :(float)distance
+                                                    :(simd_float3)position{
+    
+    simd_float3 forwardVector = {matrix.columns[0].z, matrix.columns[1].z, matrix.columns[2].z};
+    simd_float3 rightVector = {matrix.columns[0].x, matrix.columns[1].x, matrix.columns[2].x};
+    simd_float3 upVector = simd_cross(forwardVector, rightVector);
+    simd_float3 centerPoint = position + forwardVector * distance;
+    simd_float3 moveRightBy = rightVector * halfWidth;
+    simd_float3 moveDownBy = upVector * halfHeight;
+    
+    simd_float3 upperLeft = centerPoint - moveRightBy + moveDownBy;
+    simd_float3 upperRight = centerPoint + moveRightBy + moveDownBy;
+    simd_float3 lowerRight = centerPoint + moveRightBy - moveDownBy;
+    simd_float3 lowerLeft = centerPoint - moveRightBy - moveDownBy;
+    
+    struct FrustumPoints points = {(simd_float4x4)matrix,
+            (simd_float3) upperLeft,
+            (simd_float3) upperRight,
+            (simd_float3) lowerRight,
+            (simd_float3) lowerLeft
+    };
+    
+    return points;
+    
+}
+/*
+-(const matrix_float4x4) toShadowProjectionMatrix {
+    
+    // create shadow camera using bounding sphere
+    float viewSize = self.viewSize;
+    
+    const float aspect = self.aspect;
+    
+    float near   = - 1.f;
+    
+    float far    =  self.far ;
+   
+    float left   = -viewSize * aspect * 0.5;
+    float right  =  viewSize * 0.5;
+    float bottom = -viewSize * aspect;
+    float top    =  viewSize;
+    
+    
+    float dx = (float){ right - left };
+    float dy = (float){ top - bottom };
+    float cx = (float){ right + left };
+    float cy = (float){ top + bottom };
+    
+    float Left      = (float) {cx - dx};
+    float Right     = (float) {cx + dx};
+    float Bottom    = (float) {cy - dy};
+    float Top       = (float) {cy + dy};
+    
+   // float scaleW = (float)( Right - Left ) / self.viewWidth;
+   // float scaleH = (float)( Top - Bottom ) / self.viewHeight;
+    
+     _shadowProjectionMatrix = matrix_ortho_left_hand( Left , Right , Bottom , Top , near , far );
+    
+    return _shadowProjectionMatrix;
+}
+
+- (const matrix_float4x4)setFrustum:(float)fov :(float)aspect :(float)front :(float)back {}
+    */
 
 @end

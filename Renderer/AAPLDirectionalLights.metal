@@ -16,6 +16,7 @@ struct QuadInOut
     float3 eye_position;
 };
 
+
 vertex QuadInOut lighting_vertex(constant SimpleVertex * vertices  [[ buffer(BufferIndexQuadVertexData) ]],
                                  constant FrameData    & frameData [[ buffer(BufferIndexFrameData) ]],
                                    uint                    vid     [[ vertex_id ]])
@@ -23,9 +24,23 @@ vertex QuadInOut lighting_vertex(constant SimpleVertex * vertices  [[ buffer(Buf
     QuadInOut out;
     
     out.position = float4(vertices[vid].position.xy , 0.f, 1.f);
+    
     float4 unprojected_eye_coord = frameData.projection_matrix_inverse * out.position;
+    
     out.eye_position = unprojected_eye_coord.xyz / unprojected_eye_coord.w;
+    
     return out;
+}
+
+half4 fog(float3 eye_position, half4 color);
+
+inline half4 fog(float3 eye_position, half4 color) {
+  float distance = eye_position.z;
+  float density = 0.02;
+  float fog = 1.0 - clamp(exp(-density * distance), 0.0, 1.0);
+  half4 fogColor = half4(1.0);
+  color = mix(color, fogColor, fog);
+  return color;
 }
 
 inline half4 deferred_directional_lighting_fragment_common(QuadInOut            in,
@@ -56,7 +71,7 @@ inline half4 deferred_directional_lighting_fragment_common(QuadInOut            
 
     half specular_shininess = albedo_specular.w * half(frameData.shininess_factor);
 
-    half specular_factor = powr(max(dot(half3(normal_shadow.xyz),half3(halfway_vector)),1.0h), specular_intensity);
+    half specular_factor = powr(max(dot(half3(normal_shadow.xyz),half3(halfway_vector)), 0.5h), specular_intensity);
 
     half3 specular_contribution = specular_factor * half3(albedo_specular.xyz) * specular_shininess * sun_color;
 
@@ -73,7 +88,8 @@ inline half4 deferred_directional_lighting_fragment_common(QuadInOut            
 
     color *= shadowSample;
 
-    return half4(color, 1.0);
+    return  half4(color, 1.f);
+    
 }
 
 fragment half4 lighting_fragment(
@@ -90,7 +106,7 @@ fragment half4 lighting_fragment(
     half4 albedo_specular = albedo_specular_GBuffer.read(position.xy);
     
     half4 final_color = deferred_directional_lighting_fragment_common(in, frameData, depth, normal_shadow, albedo_specular);
-
+    final_color = fog( frameData.cameraPos , final_color);
     return final_color;
 }
 

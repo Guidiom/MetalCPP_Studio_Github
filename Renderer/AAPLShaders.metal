@@ -76,6 +76,7 @@ constexpr sampler shadowSampler(coord::normalized,
 constant float kMaxHDRValue  = float(500.0f);
 //constant float3 kRec709Luma = float3(0.2126f, 0.7152f, 0.0722f);
 
+half4 fog(float4 position, half4 color);
 vector_float3 computeNormalMap(v1f in, texture2d<float> normalMapTexture);
 float3 fresnelSchlick(float cosTheta, float3 F0);
 float3 fresnelSchlickRoughness(float cosTheta, float3 F0, float roughness);
@@ -83,13 +84,13 @@ float  DistributionGGX(float3 N, float3 H, float roughness);
 float  GeometrySchlickGGX(float NdotV, float roughness);
 float  GeometrySmith(float3 N, float3 V, float3 L, float roughness);
 float4 computeSpecular(PBRParameter parameters);
+
 float2 calculateScreenCoord( float3 ndcpos )
 {
     float2 screenTexcoord = (ndcpos.xy) * 0.5 + float2(0.5);
     screenTexcoord.y = 1.0 - screenTexcoord.y;
     return screenTexcoord;
 }
-
 
 ///--Texture bitangent & tangent mapping-------------------------------------------------------------------------------------------------------------
 inline vector_float3 computeNormalMap( v1f in, texture2d<float> normalMapTexture) {
@@ -168,9 +169,9 @@ inline float4 computeSpecular(PBRParameter parameters){
     float3  Lo = float3(0.f);
     for( int8_t i = 0; i < 1 ; i++)
     {
-        float3  L = normalize(parameters.sunEyeDirection.xyz);
+        float3  L = normalize(parameters.sunEyeDirection.xyz );
         float3  H = normalize(V + L);
-        float   distance = length(parameters.sunPosition - parameters.worldPos);
+        float   distance = length(parameters.sunEyeDirection.xyz);
         float   attenuation = 1.f / (distance * distance);
         float3  radiance = parameters.sunColor.xyz * attenuation;
 
@@ -183,13 +184,10 @@ inline float4 computeSpecular(PBRParameter parameters){
         float3  specular = numerator / denominator;
         
         float3  kS = F;
-
         float3  kD = float3(1.0) - kS;
 
         kD *= 1.0 - parameters.metalness;
-
         float NdotL = max(dot(N, L), 0.0);
-
         Lo += (kD * parameters.baseColor / PI + specular) * radiance * NdotL;
     }
 
@@ -238,7 +236,7 @@ PBRParameter calculateParameters(v1f in,
     
     parameters.normal = computeNormalMap(in, normalMap);
 
-    parameters.viewDir = normalize(frameData.cameraPos - parameters.worldPos);
+    parameters.viewDir = normalize(frameData.cameraPos- parameters.worldPos);
     
     parameters.reflectedVector = reflect(-parameters.viewDir, parameters.normal);
     
@@ -269,7 +267,6 @@ PBRParameter calculateParameters(v1f in,
     parameters.sunEyeDirection = frameData.sun_eye_direction;
     parameters.sunPosition     = frameData.sunPosition.xyz;
     parameters.sunColor        = frameData.sun_color.xyz;
-    parameters.sunPosition     = frameData.sunPosition.xyz;
     
     return parameters;
 }

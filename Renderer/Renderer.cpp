@@ -47,7 +47,7 @@ Renderer::Renderer(MTK::View &pView )
 , _pShaderLibrary ( _pDevice->newDefaultLibrary())
 , _colorTargetPixelFormat (pView.colorPixelFormat())
 , _depthStencilTargetPixelFormat(pView.depthStencilPixelFormat())
-, _albedo_specular_GBufferFormat(MTL::PixelFormatRGBA8Unorm_sRGB)
+, _albedo_specular_GBufferFormat(MTL::PixelFormatBGRA8Unorm_sRGB)
 , _normal_shadow_GBufferFormat(MTL::PixelFormatRGBA8Snorm)
 , _depth_GBufferFormat(MTL::PixelFormatR32Float)
 , _sampleCount(pView.sampleCount())
@@ -93,6 +93,7 @@ Renderer::Renderer(MTK::View &pView )
     buildBuffers();
     buildParticleBuffer();
     buildLightsBuffer();
+    
     _semaphore = dispatch_semaphore_create( kMaxFramesInFlight );
 }
 
@@ -120,9 +121,8 @@ void Renderer::buildShadowPipeline()
     pRenderPipelineDescriptor->setFragmentFunction( nullptr );
     pRenderPipelineDescriptor->setDepthAttachmentPixelFormat( shadowMapPixelFormat );
     pRenderPipelineDescriptor->colorAttachments()->object(RenderTargetLighting)->setPixelFormat(MTL::PixelFormatInvalid);
-    pRenderPipelineDescriptor->setRasterizationEnabled(true);
-    pRenderPipelineDescriptor->setRasterSampleCount(NS::UInteger(1));
-    
+    //pRenderPipelineDescriptor->setRasterizationEnabled(false);
+    pRenderPipelineDescriptor->setSampleCount(NS::UInteger(sampleCount()/sampleCount()));
     _pShadowPipelineState = _pDevice->newRenderPipelineState( pRenderPipelineDescriptor, &pError );
     AAPL_ASSERT_NULL_ERROR( pError, "Failed to create  shadow map render pipeline state for Objects:");
     pRenderPipelineDescriptor->release();
@@ -168,7 +168,7 @@ void Renderer::buildGBufferPipeline()
     pRenderPipelineDescriptor->colorAttachments()->object(RenderTargetDepth)->setPixelFormat( _depth_GBufferFormat );
     pRenderPipelineDescriptor->setDepthAttachmentPixelFormat( depthStencilPixelFormat );
     pRenderPipelineDescriptor->setStencilAttachmentPixelFormat( depthStencilPixelFormat );
-
+    pRenderPipelineDescriptor->setSampleCount(NS::UInteger(sampleCount()/sampleCount()));
     _pGBufferPipelineState = _pDevice->newRenderPipelineState( pRenderPipelineDescriptor, &pError );
     AAPL_ASSERT_NULL_ERROR( pError, "Failed to create GBuffer render pipeline state" );
 
@@ -614,6 +614,7 @@ void Renderer::buildTextures()
     pShadowTextureDesc->setHeight( 2048 );
     pShadowTextureDesc->setMipmapLevelCount( 1 );
     pShadowTextureDesc->setResourceOptions( MTL::ResourceStorageModePrivate );
+    pShadowTextureDesc->setSampleCount(NS::UInteger(sampleCount()/sampleCount()));
     pShadowTextureDesc->setUsage( MTL::TextureUsageRenderTarget | MTL::TextureUsageShaderRead | MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
     _pShadowMap = _pDevice->newTexture( pShadowTextureDesc );
     _pShadowMap->setLabel( AAPLSTR( "shadow Map" ) );
@@ -623,6 +624,7 @@ void Renderer::buildTextures()
     MTL::TextureDescriptor* _pGBufferTextureDesc = MTL::TextureDescriptor::alloc()->init();
     _pGBufferTextureDesc->allowGPUOptimizedContents();
     _pGBufferTextureDesc->setMipmapLevelCount( 1 );
+    _pGBufferTextureDesc->setSampleCount(NS::UInteger(sampleCount()/sampleCount()));
     _pGBufferTextureDesc->setTextureType( MTL::TextureType2D );
     _pGBufferTextureDesc->setStorageMode( MTL::StorageModePrivate);
     _pGBufferTextureDesc->setUsage( MTL::TextureUsageRenderTarget | MTL::TextureUsageShaderRead );
@@ -769,8 +771,7 @@ void Renderer::buildBuffers()
     _icosahedronMesh = makeIcosahedronMesh( _pDevice, *icosahedronVertexDescriptor, icoshedronRadius);
    
     icosahedronVertexDescriptor->release();
-    /// properties erstellen
-
+    
     std::vector <float3> _positions;
     std::vector <float2> _uv;
     std::vector <float3> _normals;
@@ -879,7 +880,7 @@ void Renderer::buildParticleBuffer(){
 
     Particle particles[num_particles];
 
-    for( NS::UInteger i = 0; i < num_particles; i++) {
+    for( uint32_t i = 0; i < num_particles; i++) {
         particles[i]={
             uint{
                 1
@@ -984,16 +985,21 @@ void Renderer::step_animation()
 void Renderer::generateComputedTexture( MTL::CommandBuffer* pCommandBuffer, MTL::Buffer* pUniformsBuffer )
 {
     AAPL_ASSERT( pCommandBuffer, "CommandBuffer for Kernel Computing not valid");
-
+    
+    pCommandBuffer->addCompletedHandler([this, pCommandBuffer]( MTL::CommandBuffer* ){
+        dispatch_semaphore_signal( _semaphore );
+        CFTimeInterval start = pCommandBuffer->GPUStartTime();
+        CFTimeInterval end = pCommandBuffer->GPUEndTime();
+        gpuRuntimeDuration = end - start;
+    });
+   
     using simd::float2;
     using simd::float4;
     
-    CFAbsoluteTime currentTime = CFAbsoluteTime();
-    
     float* delta= reinterpret_cast<float*>(_pTimeBuffer->contents());
   
-    if(_previousTime != currentTime) {
-        *delta = fmin(float(currentTime - _previousTime), 1.f / 30.f);
+    if(!gpuRuntimeDuration) {
+        *delta = fmin(float(gpuRuntimeDuration), 1.f / 30.f);
     } else {
         *delta = (1.f / 60.f);
     }
@@ -1053,18 +1059,29 @@ void Renderer::generateComputedTexture( MTL::CommandBuffer* pCommandBuffer, MTL:
     } else {
         return;
     }
-
-    _previousTime = currentTime;
-
 }
 
 void Renderer::drawInView( MTK::View * pView, MTL::Drawable* pCurrentDrawable, MTL::Texture* pDepthStencilTexture )
 {
     /// RENDER START NON DRAWABLE
-    ///
-    dispatch_semaphore_wait( this->_semaphore, DISPATCH_TIME_FOREVER );
     
-    MTL::CommandBuffer* pCmd = _pCommandQueue->commandBuffer();
+    dispatch_semaphore_wait( this->_semaphore, DISPATCH_TIME_FOREVER );
+    MTL::CommandBufferDescriptor *desc = MTL::CommandBufferDescriptor::alloc()->init() ;
+    desc->setErrorOptions(MTL::CommandBufferErrorOptionEncoderExecutionStatus);
+    MTL::CommandBuffer* pCmd = _pCommandQueue->commandBuffer(desc);
+    /*
+    NS::Error *error = pCmd->error();
+
+    MTL::CommandBufferEncoderInfo* encoderInfos =  pCmd-> CommandBufferEncoderInfoErrorKey( error->userInfo()->description()->string());
+    
+
+    for(auto & info : encoderInfos ) {
+                print(info.label + info.debugSignposts.joined())
+                if info.errorState == .faulted {
+                    print(info.label + " faulted!")
+                }
+            }
+        */
     
     step_animation();
     
@@ -1095,7 +1112,8 @@ void Renderer::drawInView( MTK::View * pView, MTL::Drawable* pCurrentDrawable, M
     const float scl = instancesSize();
     const float obscl = getGroupScale();
     const float instanceRowCount = pow( numberOfInstances(), 1.f / 3 );
-    float3 objectPosition = { 0.f,  4.f + float(instanceRowCount / 2) , -1.f -float(instanceRowCount * 1.5f) };
+    
+    float3 objectPosition = { 0.f,  4.f + float(instanceRowCount)/2 , -1.f -float(instanceRowCount * 1.5f) };
     
     float4x4 rt = makeTranslate((float3){ objectPosition.x , objectPosition.y , objectPosition.z});
     float4x4 rr1 = makeYRotate( -_angle);
@@ -1160,9 +1178,6 @@ void Renderer::drawInView( MTK::View * pView, MTL::Drawable* pCurrentDrawable, M
     pFrameData->metallnessBias = metallTextureValue();
     pFrameData->roughnessBias = roughnessTextureValue();
     
-    
-    pFrameData->scaleMatrix = matrix4x4_scale(vector_float3(1.f));
-    
     pFrameData->viewMatrix = cameraData().viewMatrix;
     
     pFrameData->cameraPos = cameraData().cameraPosition;
@@ -1191,17 +1206,16 @@ void Renderer::drawInView( MTK::View * pView, MTL::Drawable* pCurrentDrawable, M
     pFrameData->sky_modelview_matrix = matrix_multiply( pFrameData->skyModelMatrix , pFrameData->viewMatrix);
     
     ///sun updat
-    pFrameData->sun_color = (float4){ 0.8,  0.8,  0.8, 1.f };
+    pFrameData->sun_color = (float4){ 0.9,  0.9,  0.9, 1.f };
     pFrameData->sunPosition = cameraData().sunLightPosition;
     
-    pFrameData->sun_specular_intensity = 1;
-    pFrameData->shininess_factor = 1.;
+    pFrameData->sun_specular_intensity = 1.0;
+    pFrameData->shininess_factor = 1.0;
     pFrameData->point_size = 0.2;
     
     pFrameData->sun_eye_direction = cameraData().sunEyeDirection;
     
     pFrameData->shadow_view_matrix = shadowCameraData().viewMatrix;
-    
     pFrameData->shadow_projections_matrix = shadowCameraData().projectionMatrix;
     
     float4x4 shadowScale = matrix4x4_scale(0.5f,-0.5f, 1.0);
@@ -1225,7 +1239,7 @@ void Renderer::drawInView( MTK::View * pView, MTL::Drawable* pCurrentDrawable, M
     
     updateLights( matrix_multiply( pFrameData->viewMatrix, _lightModelMatrix));
     
-    //updateDebugOutput();
+    updateDebugOutput();
     
     pCmd->setLabel(AAPLSTR("Compute & Shadow & GBuffer Commands"));
     
@@ -1279,10 +1293,10 @@ void Renderer::drawInView( MTK::View * pView, MTL::Drawable* pCurrentDrawable, M
     pCmd->commit();
     
     /// BEGIN DRAWABLE RENDERING
-    pCmd = _pCommandQueue->commandBuffer();
+    pCmd = _pCommandQueue->commandBuffer(desc);
     pCmd->setLabel( AAPLSTR("Final Render Pass"));
     
-    pCmd->addCompletedHandler([this]( MTL::CommandBuffer* ){
+    pCmd->addCompletedHandler([this, pCmd]( MTL::CommandBuffer* ){
         dispatch_semaphore_signal( _semaphore );
     });
     
@@ -1492,14 +1506,16 @@ void Renderer::drawableSizeWillChange( const MTL::Size & size){
     
     float near = cameraData().near;
     float far = cameraData().far;
+    float fovy = cameraData().fovyRadians;
     
-    _viewSize = CGSizeMake(size.width, size.height);
-    _projectionMatrix = makePerspective(radians_from_degrees(45.f), _aspect, near, far );
+    _projectionMatrix = makePerspective( fovy, _aspect, near, far );
+    
     
     MTL::TextureDescriptor* _pGBufferTextureDesc = MTL::TextureDescriptor::alloc()->init();
     _pGBufferTextureDesc->setWidth( size.width );
     _pGBufferTextureDesc->setHeight( size.height);
     _pGBufferTextureDesc->setMipmapLevelCount( 1 );
+    _pGBufferTextureDesc->setSampleCount(sampleCount()/sampleCount());
     _pGBufferTextureDesc->setTextureType( MTL::TextureType2D );
 
     _pGBufferTextureDesc->setUsage( MTL::TextureUsageRenderTarget | MTL::TextureUsageShaderRead );
@@ -1789,7 +1805,7 @@ void Renderer::updateDebugOutput() {
     
     std::cout <<  "   | CameraPosition float3" << std::endl;
     std::cout <<  "---+--------------------------------" << std::endl;
-    std::cout <<  "c:" << "0" << "| " << cameraData().viewMatrix.columns[3].x  << " " << cameraData().viewMatrix.columns[3].y  << " " << cameraData().viewMatrix.columns[3].z << " " << std::endl;
+    std::cout <<  "c:" << "0" << "| " << cameraData().cameraPosition.x  << " " << cameraData().cameraPosition.y  << " " << cameraData().cameraPosition.z << " " << std::endl;
     std::cout <<  "---+--------------------------------" << std::endl << std::ends;
     
     std::cout <<  "   | CameraDirection float4" << std::endl;
@@ -1814,14 +1830,4 @@ void Renderer::updateDebugOutput() {
     std::cout <<  "s:" << "i" << "| " << shadowCameraData().projectionMatrix.columns[i].x  << " " << shadowCameraData().projectionMatrix.columns[i].y  << " " << shadowCameraData().projectionMatrix.columns[i].z << " " << shadowCameraData().projectionMatrix.columns[i].w << std::endl;
     }
     std::cout <<  "---+--------------------------------" << std::endl << std::ends;
-    
 }
-
-
-
-
-
-
-
-
-

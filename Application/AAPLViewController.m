@@ -145,8 +145,8 @@ NS_OPTIONS(uint8_t, keyCode)
 
 - (void)mouseDragged:(NSEvent *)event        { _mouseDrag = (simd_float2){ (float)event.deltaX, (float)event.deltaY };
     float rotation_speed = 0.1f;
-    [_aDapter.camera rotate:(float) radians_from_degrees(-rotation_speed * _mouseDrag.x) : _aDapter.camera.LocalUp];
-    [_aDapter.camera rotate:(float) radians_from_degrees(-rotation_speed * _mouseDrag.y) : [_aDapter.camera right]];
+    [_aDapter.camera rotate:-(float) radians_from_degrees(rotation_speed * _mouseDrag.x) : _aDapter.camera.LocalUp];
+    [_aDapter.camera rotate:-(float) radians_from_degrees(rotation_speed * _mouseDrag.y) : [_aDapter.camera right]];
     _mouseDrag = (simd_float2){ 0.f, 0.f };
 }
 - (void)scrollWheel:(NSEvent *)event {
@@ -210,7 +210,7 @@ NS_OPTIONS(uint8_t, keyCode)
     [_view setDepthStencilPixelFormat: TARGETDEPTHSTENCILFORMAT];
     _view.preferredFramesPerSecond = 60;
     _view.clearColor  = MTLClearColorMake( 1.0, 1.0, 1.0, 1.0 );
-    _view.clearDepth  = 1;
+    _view.clearDepth  = 0;
     _view.sampleCount = 1;
     
     ///initialize RenderAdapter with view
